@@ -2,6 +2,7 @@ output_path: "./outputs"
 white_bg: False
 gaussian_path: "./gs_fill.ply"
 gaussian_orig: "./orange_raw.ply"
+lora_path: "./model/zxy"
 
 lrs:
     means: 1.6e-4

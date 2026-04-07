@@ -1,0 +1,5 @@
+class_prompt: "screw"
+save_dir: "./model/zxy"
+image_dir: "/home/yeongyoo/03_Dataset/01_t-less_v2/sliced_images/zxy/"
+nickname: "zxy"
+sd_model: "sd2-community/stable-diffusion-2-depth"

@@ -112,7 +112,7 @@ class DreamBoothFineTuning:
             perm = torch.randperm(instance_images.size(0))
             shuffled_instances = instance_images[perm]
             
-            for i in range(0, shuffled_instances, self.cfg.train_batch_size):
+            for i in range(0, shuffled_instances.size(0), self.cfg.train_batch_size):
             
                 optimizer.zero_grad()
                 
@@ -239,30 +239,32 @@ class DreamBoothFineTuning:
             
             horizontal_prompt = f"A horizontal cross-section of a {self.cfg.nickname} {self.cfg.class_prompt}"
             vertical_prompt = f"A vertical cross-section of a {self.cfg.nickname} {self.cfg.class_prompt}"
+            vanilla_prompt = f"A {self.cfg.nickname} {self.cfg.class_prompt}"
             
             print(f"🍎Let's start training of {self.cfg.nickname} in the class {self.cfg.class_prompt}!")
             
         else:
             horizontal_prompt = f"A horizontal cross-section of a {self.cfg.class_prompt}"
             vertical_prompt = f"A vertical cross-section of a {self.cfg.class_prompt}"
+            vanilla_prompt = f"A {self.cfg.class_prompt}"
             
             print(f"🍎Let's start training of {self.cfg.class_prompt}!")
             
         if self.cfg.nickname is not None:
             self.train_dreambooth(
                                 instance_images = vanilla_batch,
-                                instance_prompt = self.cfg.class_prompt, 
+                                instance_prompt = vanilla_prompt, 
                                 desc_mention = f"🌟Teaching {self.cfg.nickname}, the new {self.cfg.class_prompt}...")
         
         self.train_dreambooth(
                             instance_images = vertical_batch,
                             instance_prompt = vertical_prompt, 
-                            desc_mention = "🎥Horizontical view fine-tuning started...")
+                            desc_mention = "🎥Vertical view fine-tuning started...")
         
         self.train_dreambooth(
                             instance_images = horizontal_batch,
                             instance_prompt = horizontal_prompt, 
-                            desc_mention = "🔪Vertical view fine-tuning started...")
+                            desc_mention = "🔪Horizontal view fine-tuning started...")
         
         self.save_weights()
 

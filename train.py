@@ -52,6 +52,10 @@ class Trainer:
             self.pipe_vertical = StableDiffusionDepth2ImgPipeline.from_pretrained(
                 self.trainer_cfg.sd_model_vertical
             ).to(dev_vertical)
+            
+            if self.trainer_cfg.lora_path is not None:
+                self.pipe_vertical.load_lora_weights(self.trainer_cfg.lora_path)
+            
             self.pipe_vertical.set_progress_bar_config(disable=True)
         except Exception as e:
             
@@ -65,6 +69,10 @@ class Trainer:
             self.pipe_horizontal = StableDiffusionDepth2ImgPipeline.from_pretrained(
                 self.trainer_cfg.sd_model_horizontal
             ).to(dev_horizontal)
+            
+            if self.trainer_cfg.lora_path is not None:
+                self.pipe_vertical.load_lora_weights(self.trainer_cfg.lora_path)
+            
             self.pipe_horizontal.set_progress_bar_config(disable=True)
         except Exception as e:
             

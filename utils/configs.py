@@ -120,6 +120,7 @@ class TrainerConfig(BaseModel):
     white_bg: bool
     gaussian_path: str
     gaussian_orig: str
+    lora_path: Optional[str] = None
     
     epochs: int = 400
     init_radius: float = 2.5
