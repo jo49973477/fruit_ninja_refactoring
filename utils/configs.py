@@ -2,6 +2,7 @@ from typing import Dict, Any, Optional, List
 from pydantic import BaseModel, Field, model_validator
 import hydra
 from omegaconf import DictConfig, OmegaConf
+from dataclasses import dataclass, field
 
 # --- Sub-models ---
 
@@ -115,47 +116,59 @@ class PhysicsConfig(BaseModel):
 
 class TrainerConfig(BaseModel):
     # --- 1. 기본 경로 및 파일 설정 (원래 있던 거) ---
-    model_path: str
     output_path: str
-    physics_config: str
-    guidance_config: str
     white_bg: bool
     gaussian_path: str
     gaussian_orig: str
-
-    # --- 2. 훈련 루프 제어 변수 (길바닥에 있던 애들) ---
-    view_count: int = 180
-    epochs: int = 400
-    steps_per_c: int = 3
-    spatial_lr_scale: float = 0.1
-
-    # --- 3. 가우시안 최적화 파라미터 (호러 무비 주인공들) ---
-    # Learning Rates
-    position_lr_init: float = 0.001
-    position_lr_final: float = 0.0002
-    position_lr_delay_mult: float = 0.02
-    position_lr_max_steps: int = 600
-    feature_lr: float = 0.001
-    opacity_lr: float = 0.01
-    scaling_lr: float = 0.001
-    rotation_lr: float = 0.01
-
-    # Densification & Control
-    percent_dense: float = 0.01
-    density_start_iter: int = 0
-    density_end_iter: int = 3000
-    densification_interval: int = 50
-    opacity_reset_interval: int = 700
-    densify_grad_threshold: float = 0.01
     
-    # other stuffs
-    max_values: int = 10000
+    epochs: int = 400
+    init_radius: float = 2.5
+    image_size: int = 512
+    sds_per_epoch: int = 10
+    sds_steps: int = 5
+    guidance_scale: int = 15
+    
+    lrs: Dict[str, float] = field(default_factory=lambda: {
+        "means": 1.6e-4,    
+        "scales": 1e-3,    
+        "quats": 1e-3,      
+        "opacities": 1e-2,  
+        "colors": 2.5e-3
+    })
+    
     sd_model_vertical: str = "sd2-community/stable-diffusion-2-depth"
     sd_model_horizontal: str = "sd2-community/stable-diffusion-2-depth"
-    image_size: int = 512
     
+    vertical_prompt: str=  "A high-quality, ultra-realistic photo of an orange, detailed orange peel texture, perfect lighting, 8k resolution"
+    vertical_negative_prompt: str = "low resolution, blurry, distorted, cross-section, cut, flesh, inside"
+    horizontal_prompt: str = "A high-quality, ultra-realistic macro photo of an orange cross-section, juicy orange flesh, distinct citrus segments, 8k resolution"
+    horizontal_negative_prompt: str = "low resolution, blurry, peel only, whole orange, distorted, fake"
+    
+
+
+class FinetuneConfig(BaseModel):
+    nickname: Optional[str] = None
+    class_prompt: str
+    save_dir: str = "./model"
+    load_dir: Optional[str] = None
+    image_dir: str
+    sd_model: str = "sd2-community/stable-diffusion-2-depth"
+    prior_loss_weight: float = 1.0
+    num_train_epochs: int = 100
+    learning_rate: float = 5e-6
+    train_batch_size: int = 4
+
+
 
 class FillingConfig(BaseModel):
     model_path: str
     output_path: str
     white_br: bool = False
+    
+    
+    rotation_degree: List[float] = [0.0]
+    rotation_axis: List[int] = [0]
+    opacity_threshold: float = 0.002
+    grid_n: int = 160
+    density_threshold: float = 1.0
+    

@@ -1,0 +1,25 @@
+output_path: "./outputs"
+white_bg: False
+gaussian_path: "./gs_fill.ply"
+gaussian_orig: "./orange_raw.ply"
+
+lrs:
+    means: 1.6e-4
+    scales: 1.0e-3
+    quats: 1.0e-3
+    opacities: 1.0e-2
+    colors: 2.5e-3
+
+sd_model_vertical: "sd2-community/stable-diffusion-2-depth"
+sd_model_horizontal: "sd2-community/stable-diffusion-2-depth"
+
+vertical_prompt: "a photo of the vertical cross section of an orange, detailed"
+vertical_negative_prompt: "low resolution, blurry, distorted, cross-section, cut, flesh, inside, table, leaves, shadow, environment, background elements, multiple oranges, stem"
+
+horizontal_prompt: "a photo of the horizontal cross section of an orange, detailed"
+horizontal_negative_prompt: "low resolution, blurry, peel, rind, whole orange, distorted, fake, table, hands, shadow, leaves, perspective, 3d object"
+
+sds_per_epoch: 10
+sds_steps: 15
+guidance_scale: 15
+epochs: 100

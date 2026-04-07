@@ -1,0 +1,2 @@
+model_path: "orange_raw.ply"
+output_path: "filled_orange_output.ply"

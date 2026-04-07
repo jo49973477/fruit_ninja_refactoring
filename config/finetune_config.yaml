@@ -1,0 +1,4 @@
+class_prompt: "orange"
+save_dir: "./model"
+image_dir: "/home/yeongyoo/03_Dataset/03_fruitninja_finetune/orange/"
+sd_model: "sd2-community/stable-diffusion-2-depth"

@@ -4,36 +4,10 @@ import numpy as np
 import taichi as ti
 import mcubes
 
-
 # 1. densify grids
 # 2. identify grids whose density is larger than some threshold
 # 3. filling grids with particles
 # 4. identify and fill internal grids
-
-
-def particle_position_tensor_to_ply(position_tensor, filename):
-    """
-    Save a (N, 3) tensor of particle positions to a binary .ply file.
-    Overwrites the file if it exists.
-    """
-    if os.path.exists(filename):
-        os.remove(filename)
-    position = position_tensor.clone().detach().cpu().numpy().astype(np.float32)
-    num_particles = position.shape[0]
-
-    header = f"""ply
-format binary_little_endian 1.0
-element vertex {num_particles}
-property float x
-property float y
-property float z
-end_header
-"""
-    with open(filename, "wb") as f:
-        f.write(header.encode('utf-8'))
-        f.write(position.tobytes())
-
-    print(f"Saved {num_particles} particles to {filename}")
 
 
 @ti.func
@@ -451,6 +425,30 @@ def get_particle_volume(pos, grid_n: int, grid_dx: float, unifrom: bool = False)
         return particle_vol.to_torch()
 
 
+def particle_position_tensor_to_ply(position_tensor, filename):
+    # position is (n,3)
+    
+    if not os.path.exists("./log"):
+        os.makedirs("./log", exist_ok=True)
+    
+    if os.path.exists(filename):
+        os.remove(filename)
+    position = position_tensor.clone().detach().cpu().numpy()
+    num_particles = (position).shape[0]
+    position = position.astype(np.float32)
+    with open(filename, "wb") as f:  # write binary
+        header = f"""ply
+format binary_little_endian 1.0
+element vertex {num_particles}
+property float x
+property float y
+property float z
+end_header
+"""
+        f.write(str.encode(header))
+        f.write(position.tobytes())
+        print("write", filename)
+
 def fill_particles(
     pos,
     opacity,
@@ -562,3 +560,213 @@ def fill_particles(
     print(diff)
 
     return particles_tensor
+
+
+def fill_particles_2d(
+    pos,
+    opacity,
+    cov,
+    plane,
+    grid_n: int,
+    max_samples: int,
+    grid_dx: float,
+    search_thres=1.0,
+    max_particles_per_cell=1,
+    search_exclude_dir=5,
+    ray_cast_dir=4,
+    boundary: list = None,
+    smooth: bool = False
+):
+    pos_clone = pos.clone()
+    if boundary is not None:
+        assert len(boundary) == 6
+        mask = torch.ones(pos_clone.shape[0], dtype=torch.bool).cuda()
+        max_diff = 0.0
+        for i in range(3):
+            mask = torch.logical_and(mask, pos_clone[:, i] > boundary[2 * i])
+            mask = torch.logical_and(mask, pos_clone[:, i] < boundary[2 * i + 1])
+            max_diff = max(max_diff, boundary[2 * i + 1] - boundary[2 * i])
+
+        pos = pos[mask]
+        opacity = opacity[mask]
+        cov = cov[mask]
+
+        grid_dx = max_diff / grid_n
+        new_origin = torch.tensor([boundary[0], boundary[2], boundary[4]]).cuda()
+        pos = pos - new_origin
+
+    ti_pos = ti.Vector.field(n=3, dtype=float, shape=pos.shape[0])
+    ti_opacity = ti.field(dtype=float, shape=opacity.shape[0])
+    ti_cov = ti.Vector.field(n=6, dtype=float, shape=cov.shape[0])
+    ti_pos.from_torch(pos.reshape(-1, 3))
+    ti_opacity.from_torch(opacity.reshape(-1))
+    ti_cov.from_torch(cov.reshape(-1, 6))
+
+    grid = ti.field(dtype=int, shape=(grid_n, grid_n, grid_n))
+    grid_density = ti.field(dtype=float, shape=(grid_n, grid_n, grid_n))
+    particles = ti.Vector.field(n=3, dtype=float, shape=max_samples)
+    fill_num = 0
+
+    # compute density_field
+    densify_grids(ti_pos, ti_opacity, ti_cov, grid, grid_density, grid_dx)
+
+    # fill internal grids
+    fill_num = internal_filling_2d(
+        grid,
+        grid_density,
+        grid_dx,
+        particles,
+        fill_num,
+        max_particles_per_cell,
+        exclude_dir=search_exclude_dir,  # 0: x, 1: -x, 2: y, 3: -y, 4: z, 5: -z direction
+        ray_cast_dir=ray_cast_dir,  # 0: x, 1: -x, 2: y, 3: -y, 4: z, 5: -z direction
+        threshold=search_thres,
+        plane=plane
+    )
+    print("after internal grids: ", fill_num)
+
+    # put new particles together with original particles
+    particles_tensor = particles.to_torch()[:fill_num].cuda()
+    if boundary is not None:
+        particles_tensor = particles_tensor + new_origin
+    particles_tensor = torch.cat([pos_clone, particles_tensor], dim=0)
+    print("particle count after internal filling:")
+    print(particles_tensor.size())
+    diff = particles_tensor.size()[0] - pos_clone.size()[0]
+    print("total internal filling size: ")
+    print(diff)
+    return particles_tensor
+
+
+@ti.kernel
+def get_attr_from_closest(
+    ti_pos: ti.template(),
+    ti_shs: ti.template(),
+    ti_opacity: ti.template(),
+    ti_cov: ti.template(),
+    ti_new_pos: ti.template(),
+    ti_new_shs: ti.template(),
+    ti_new_opacity: ti.template(),
+    ti_new_cov: ti.template(),
+):
+    for pi in range(ti_new_pos.shape[0]):
+        p = ti_new_pos[pi]
+        min_dist = 1e10
+        min_idx = -1
+        for pj in range(ti_pos.shape[0]):
+            dist = (p - ti_pos[pj]).norm()
+            if dist < min_dist:
+                min_dist = dist
+                min_idx = pj
+        ti_new_shs[pi] = ti_shs[min_idx]
+        ti_new_opacity[pi] = ti_opacity[min_idx]
+        ti_new_cov[pi] = ti_cov[min_idx]
+
+@ti.kernel
+def get_attr_from_closest2(
+    ti_pos: ti.template(),
+    ti_shs: ti.template(),
+    ti_opacity: ti.template(),
+    ti_scale: ti.template(),
+    ti_rot: ti.template(),
+    ti_new_pos: ti.template(),
+    ti_new_shs: ti.template(),
+    ti_new_opacity: ti.template(),
+    ti_new_scale: ti.template(),
+    ti_new_rot: ti.template()
+):
+    for pi in range(ti_new_pos.shape[0]):
+        p = ti_new_pos[pi]
+        min_dist = 1e10
+        min_idx = -1
+        for pj in range(ti_pos.shape[0]):
+            dist = (p - ti_pos[pj]).norm()
+            if dist < min_dist:
+                min_dist = dist
+                min_idx = pj
+        ti_new_shs[pi] = ti_shs[min_idx]
+        ti_new_opacity[pi] = ti_opacity[min_idx]
+        ti_new_scale[pi] = ti_scale[min_idx]
+        ti_new_rot[pi] = ti_rot[min_idx]
+
+def init_filled_particles(pos, shs, cov, opacity, new_pos):
+    shs = shs.reshape(pos.shape[0], -1)
+    ti_pos = ti.Vector.field(n=3, dtype=float, shape=pos.shape[0])
+    ti_cov = ti.Vector.field(n=6, dtype=float, shape=cov.shape[0])
+    ti_shs = ti.Vector.field(n=shs.shape[1], dtype=float, shape=shs.shape[0])
+    ti_opacity = ti.field(dtype=float, shape=opacity.shape[0])
+    ti_pos.from_torch(pos.reshape(-1, 3))
+    ti_cov.from_torch(cov.reshape(-1, 6))
+    ti_shs.from_torch(shs)
+    ti_opacity.from_torch(opacity.reshape(-1))
+
+    new_shs = torch.mean(shs, dim=0).repeat(new_pos.shape[0], 1).cuda()
+    ti_new_pos = ti.Vector.field(n=3, dtype=float, shape=new_pos.shape[0])
+    ti_new_shs = ti.Vector.field(n=shs.shape[1], dtype=float, shape=new_pos.shape[0])
+    ti_new_opacity = ti.field(dtype=float, shape=new_pos.shape[0])
+    ti_new_cov = ti.Vector.field(n=6, dtype=float, shape=new_pos.shape[0])
+    ti_new_pos.from_torch(new_pos.reshape(-1, 3))
+    ti_new_shs.from_torch(new_shs)
+
+    get_attr_from_closest(
+        ti_pos,
+        ti_shs,
+        ti_opacity,
+        ti_cov,
+        ti_new_pos,
+        ti_new_shs,
+        ti_new_opacity,
+        ti_new_cov,
+    )
+
+    shs_tensor = ti_new_shs.to_torch().cuda()
+    opacity_tensor = ti_new_opacity.to_torch().cuda()
+    cov_tensor = ti_new_cov.to_torch().cuda()
+
+    shs_tensor = torch.cat([shs, shs_tensor], dim=0)
+    shs_tensor = shs_tensor.view(shs_tensor.shape[0], -1, 3)
+    opacity_tensor = torch.cat([opacity, opacity_tensor.reshape(-1, 1)], dim=0)
+    cov_tensor = torch.cat([cov, cov_tensor], dim=0)
+    return shs_tensor, opacity_tensor, cov_tensor
+
+def init_filled_particles2(pos, shs, rot, scale, opacity, new_pos):
+    shs = shs.reshape(pos.shape[0], -1)
+    ti_pos = ti.Vector.field(n=3, dtype=float, shape=pos.shape[0])
+    ti_scale = ti.Vector.field(n=3, dtype=float, shape=scale.shape[0])
+    ti_shs = ti.Vector.field(n=shs.shape[1], dtype=float, shape=shs.shape[0])
+    ti_opacity = ti.field(dtype=float, shape=opacity.shape[0])
+    ti_rot = ti.Vector.field(n=4, dtype=float, shape=rot.shape[0])
+    ti_pos.from_torch(pos.reshape(-1, 3))
+    ti_scale.from_torch(scale.reshape(-1, 3))
+    ti_shs.from_torch(shs)
+    ti_opacity.from_torch(opacity.reshape(-1))
+    ti_rot.from_torch(rot.reshape(-1, 4))
+
+    new_shs = torch.mean(shs, dim=0).repeat(new_pos.shape[0], 1).cuda()
+    ti_new_pos = ti.Vector.field(n=3, dtype=float, shape=new_pos.shape[0])
+    ti_new_shs = ti.Vector.field(n=shs.shape[1], dtype=float, shape=new_pos.shape[0])
+    ti_new_opacity = ti.field(dtype=float, shape=new_pos.shape[0])
+    ti_new_scale = ti.Vector.field(n=3, dtype=float, shape=new_pos.shape[0])
+    ti_new_rot = ti.Vector.field(n=4, dtype=float, shape=new_pos.shape[0])
+    ti_new_pos.from_torch(new_pos.reshape(-1, 3))
+    ti_new_shs.from_torch(new_shs)
+
+    get_attr_from_closest2(
+        ti_pos,
+        ti_shs,
+        ti_opacity,
+        ti_scale,
+        ti_rot,
+        ti_new_pos,
+        ti_new_shs,
+        ti_new_opacity,
+        ti_new_scale,
+        ti_new_rot
+    )
+
+    shs_tensor = ti_new_shs.to_torch().cuda()
+    opacity_tensor = ti_new_opacity.to_torch().cuda()
+    scale_tensor = ti_new_scale.to_torch().cuda()
+    rot_tensor = ti_new_rot.to_torch().cuda()
+
+    return shs_tensor, opacity_tensor, scale_tensor, rot_tensor

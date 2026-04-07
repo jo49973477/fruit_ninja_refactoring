@@ -10,11 +10,11 @@ def generate_rotation_matrix(degree: float, axis: int, device="cpu") -> torch.Te
     c, s = torch.cos(rad), torch.sin(rad)
     
     if axis == 0: # X-axis
-        m = [[1, 0, 0], [0, c, -s], [0, s, c]]
+        return torch.tensor([[1, 0, 0], [0, c, -s], [0, s, c]])
     elif axis == 1: # Y-axis
-        m = [[c, 0, s], [0, 1, 0], [-s, 0, c]]
+        return torch.tensor([[c, 0, s], [0, 1, 0], [-s, 0, c]])
     elif axis == 2: # Z-axis
-        m = [[c, -s, 0], [s, c, 0], [0, 0, 1]]
+        return torch.tensor([[c, -s, 0], [s, c, 0], [0, 0, 1]])
     else:
         raise ValueError("💀The only axis which can be selected is 0, 1, 2, You dumbass!")
 
@@ -199,8 +199,8 @@ def generate_rotation_matrices(degrees, axises):
 
     for i in range(len(degrees)):
         matrices.append(generate_rotation_matrix(degrees[i], axises[i]))
-
-    return matrices
+    
+    return torch.stack(matrices)
 
 
 def apply_rotation(position_tensor, rotation_matrix):
@@ -225,3 +225,13 @@ def apply_cov_rotations(upper_cov_tensor, rotation_matrices):
     for i in range(len(rotation_matrices)):
         cov_tensor = apply_cov_rotation(cov_tensor, rotation_matrices[i])
     return get_upper_from_mat(cov_tensor)
+
+def apply_inverse_rotation(position_tensor, rotation_matrix):
+    rotated = torch.mm(position_tensor, rotation_matrix)
+    return rotated
+
+def apply_inverse_rotations(position_tensor, rotation_matrices):
+    for i in range(len(rotation_matrices)):
+        R = rotation_matrices[len(rotation_matrices) - 1 - i]
+        position_tensor = apply_inverse_rotation(position_tensor, R)
+    return position_tensor
