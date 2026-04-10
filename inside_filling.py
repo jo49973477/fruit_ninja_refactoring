@@ -34,34 +34,63 @@ class InternalFilling:
     
     
     def load_ply_to_gsplat(self, ply_path: str, device: str) -> dict:
-        """PLY 파일을 읽어서 gsplat 딕셔너리로 변환 (기존과 동일)"""
+        """PLY 파일을 읽어서 gsplat 딕셔너리로 변환 (범용 점 구름 호환 패치 적용!)"""
         print(f"📂 PLY 로딩 중: {ply_path}")
         
         plydata = PlyData.read(ply_path)
         vertex_data = plydata.elements[0].data
         
-        plydata = PlyData.read(ply_path)
+        # 1. xyz 좌표는 어떤 PLY든 무조건 공통!
         xyz = np.stack((np.asarray(vertex_data['x']),
                         np.asarray(vertex_data['y']),
                         np.asarray(vertex_data['z'])), axis=1)
-        
-        opacities = np.asarray(vertex_data['opacity'])[..., np.newaxis]
-        scales = np.stack([np.asarray(vertex_data[f'scale_{i}']) for i in range(3)], axis=1)
-        quats = np.stack([np.asarray(vertex_data[f'rot_{i}']) for i in range(4)], axis=1)
-        colors = np.stack([np.asarray(vertex_data[f'f_dc_{i}']) for i in range(3)], axis=1)
-        
-        features_extra = np.zeros((xyz.shape[0], 45))
-        for i in range(45):
-            if f'f_rest_{i}' in vertex_data.dtype.names:
-                features_extra[:, i] = np.asarray(vertex_data[f'f_rest_{i}'])
-        features_extra = torch.tensor(features_extra, dtype=torch.float32, device=device)
+        num_pts = xyz.shape[0]
 
+        # 🚨 [로보코 센세의 하이브리드 분기점]
+        if 'opacity' not in vertex_data.dtype.names:
+            print("⚠️ [로보코 경고] 범용 점 구름(x,y,z,r,g,b) 감지! 임의의 미니 가우시안으로 둔갑시킵니다!")
+            
+            # Opacity: 완전히 불투명하게 (Sigmoid 역산을 고려해 10.0 대입)
+            opacities = np.full((num_pts, 1), 10.0, dtype=np.float32)
+            
+            # Scale: 아주 작은 둥근 깍두기 모양 (3DGS는 log로 받으므로 exp(-4.6) ≒ 0.01)
+            scales = np.full((num_pts, 3), -4.6, dtype=np.float32)
+            
+            # Quats (회전): 기본 형태 유지 (w=1, x=0, y=0, z=0)
+            quats = np.zeros((num_pts, 4), dtype=np.float32)
+            quats[:, 0] = 1.0
+            
+            # Colors: 범용 PLY의 red, green, blue(0~255)를 가져와서 SH 0차항으로 변환!
+            rgb = np.stack((np.asarray(vertex_data['red']),
+                            np.asarray(vertex_data['green']),
+                            np.asarray(vertex_data['blue'])), axis=1) / 255.0
+            colors = (rgb - 0.5) / 0.28209  
+            
+            # Features Extra: 0으로 텅 비워줌
+            features_extra = np.zeros((num_pts, 45), dtype=np.float32)
+            
+        else:
+            print("🌟 [로보코 감지] 오리지널 3DGS 형태의 PLY입니다! 정상 로드합니다.")
+            # 캡틴의 원래 완벽한 로직 그대로!
+            opacities = np.asarray(vertex_data['opacity'])[..., np.newaxis]
+            scales = np.stack([np.asarray(vertex_data[f'scale_{i}']) for i in range(3)], axis=1)
+            quats = np.stack([np.asarray(vertex_data[f'rot_{i}']) for i in range(4)], axis=1)
+            colors = np.stack([np.asarray(vertex_data[f'f_dc_{i}']) for i in range(3)], axis=1)
+            
+            features_extra = np.zeros((num_pts, 45), dtype=np.float32)
+            for i in range(45):
+                if f'f_rest_{i}' in vertex_data.dtype.names:
+                    features_extra[:, i] = np.asarray(vertex_data[f'f_rest_{i}'])
+
+        # 2. 텐서 변환 (공통 로직)
+        features_extra = torch.tensor(features_extra, dtype=torch.float32, device=device)
         means = torch.tensor(xyz, dtype=torch.float32, device=device)
         scales = torch.tensor(scales, dtype=torch.float32, device=device)
         quats = torch.tensor(quats, dtype=torch.float32, device=device)
         opacities = torch.tensor(opacities, dtype=torch.float32, device=device)
         colors = torch.tensor(colors, dtype=torch.float32, device=device)
 
+        # 3. 사전 계산 (공통 로직)
         cov3D_precomp = build_cov3D_from_scales_quats(scales, quats)
         screen_points = torch.zeros((means.shape[0], 2), dtype=torch.float32, device=device, requires_grad=True)
 

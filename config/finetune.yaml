@@ -1,0 +1,51 @@
+pretrained_model_name_or_path: "sd2-community/stable-diffusion-2-base"
+pretrained_txt2img_model_name_or_path: "sd2-community/stable-diffusion-2-base"
+
+# 2. 데이터 세팅 (Data Settings)
+instance_data_dir: "./data/zxy_images"
+instance_prompt: "A zxy screw"
+class_data_dir: "./data/class_images"  # Prior Preservation 쓸 때만 필요!
+class_prompt: "A screw"
+num_class_images: 100
+
+# 3. 해상도 및 처리 (Image Processing)
+resolution: 512
+center_crop: false
+
+# 4. 학습 뼈대 세팅 (Training Basics)
+output_dir: "./model/zxy_dreambooth_lora"
+seed: 42
+train_text_encoder: false  # VRAM 모자라면 끄는 게 국룰
+train_batch_size: 4
+sample_batch_size: 4
+num_train_epochs: 1
+max_train_steps: 1000
+checkpointing_steps: 500
+
+# 5. 최적화 및 VRAM 다이어트 (Optimization & Memory)
+gradient_accumulation_steps: 1
+gradient_checkpointing: true
+mixed_precision: "fp16"  # "no", "fp16", "bf16"
+use_8bit_adam: false     # VRAM 극한으로 아낄 거면 true
+
+# 6. 학습률 및 옵티마이저 (Learning Rate & Optimizer)
+learning_rate: 5e-5
+scale_lr: false
+lr_scheduler: "constant"
+lr_warmup_steps: 0
+adam_beta1: 0.9
+adam_beta2: 0.999
+adam_weight_decay: 1e-2
+adam_epsilon: 1e-08
+max_grad_norm: 1.0
+
+# 7. 사전 지식 보존 (Prior Preservation)
+with_prior_preservation: false
+prior_loss_weight: 1.0
+
+# 8. 허깅페이스 허브 및 분산 학습 (System)
+push_to_hub: false
+hub_token: null
+hub_model_id: null
+logging_dir: "logs"
+local_rank: -1

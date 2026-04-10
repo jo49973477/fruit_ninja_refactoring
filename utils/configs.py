@@ -147,12 +147,13 @@ class TrainerConfig(BaseModel):
     
 
 
-class FinetuneConfig(BaseModel):
+class OldFinetuneConfig(BaseModel):
     nickname: Optional[str] = None
     class_prompt: str
     save_dir: str = "./model"
     load_dir: Optional[str] = None
     image_dir: str
+    output_image_save_dir: str
     sd_model: str = "sd2-community/stable-diffusion-2-depth"
     prior_loss_weight: float = 1.0
     num_train_epochs: int = 100
@@ -160,16 +161,76 @@ class FinetuneConfig(BaseModel):
     train_batch_size: int = 4
 
 
+class FinetuneConfig(BaseModel):
+    # ==========================================
+    # 1. 모델 경로 세팅 (Model Settings)
+    # ==========================================
+    pretrained_model_name_or_path: str = "sd2-community/stable-diffusion-2-base"
+    pretrained_txt2img_model_name_or_path: str = "sd2-community/stable-diffusion-2-base"
+    revision: Optional[str] = None
+    tokenizer_name: Optional[str] = None
 
-class FillingConfig(BaseModel):
-    model_path: str
-    output_path: str
-    white_br: bool = False
-    
-    
-    rotation_degree: List[float] = [0.0]
-    rotation_axis: List[int] = [0]
-    opacity_threshold: float = 0.002
-    grid_n: int = 160
-    density_threshold: float = 1.0
+    # ==========================================
+    # 2. 데이터 세팅 (Data Settings)
+    # ==========================================
+    instance_data_dir: str = "./data/zxy_images"
+    instance_prompt: str = "A zxy screw"
+    class_data_dir: Optional[str] = "./data/class_images"
+    class_prompt: Optional[str] = "A screw"
+    num_class_images: int = 100
+
+    # ==========================================
+    # 3. 해상도 및 처리 (Image Processing)
+    # ==========================================
+    resolution: int = 512
+    center_crop: bool = False
+
+    # ==========================================
+    # 4. 학습 뼈대 세팅 (Training Basics)
+    # ==========================================
+    output_dir: str = "./model/zxy_dreambooth_lora"
+    seed: int = 42
+    train_text_encoder: bool = False
+    train_batch_size: int = 4
+    sample_batch_size: int = 4
+    num_train_epochs: int = 1
+    max_train_steps: int = 1000
+    checkpointing_steps: int = 500
+    resume_from_checkpoint: Optional[str] = None
+
+    # ==========================================
+    # 5. 최적화 및 VRAM 다이어트 (Optimization & Memory)
+    # ==========================================
+    gradient_accumulation_steps: int = 1
+    gradient_checkpointing: bool = True
+    mixed_precision: str = "fp16"
+    use_8bit_adam: bool = False
+
+    # ==========================================
+    # 6. 학습률 및 옵티마이저 (Learning Rate & Optimizer)
+    # ==========================================
+    learning_rate: float = 5e-5
+    scale_lr: bool = False
+    lr_scheduler: str = "constant"
+    lr_warmup_steps: int = 0
+    adam_beta1: float = 0.9
+    adam_beta2: float = 0.999
+    adam_weight_decay: float = 1e-2
+    adam_epsilon: float = 1e-08
+    max_grad_norm: float = 1.0
+
+    # ==========================================
+    # 7. 사전 지식 보존 (Prior Preservation)
+    # ==========================================
+    with_prior_preservation: bool = False
+    prior_loss_weight: float = 1.0
+
+    # ==========================================
+    # 8. 허깅페이스 허브 및 분산 학습 (System)
+    # ==========================================
+    push_to_hub: bool = False
+    hub_token: Optional[str] = None
+    hub_model_id: Optional[str] = None
+    logging_dir: str = "logs"
+    local_rank: int = -1
     

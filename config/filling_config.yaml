@@ -1,0 +1,2 @@
+model_path: "3dgs_screw.ply"
+output_path: "screw_filled.ply"

@@ -11,3 +11,5 @@ wheels/
 outputs/
 *.ply
 model/
+validation_logs*/
+wandb/

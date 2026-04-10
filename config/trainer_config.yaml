@@ -1,8 +1,8 @@
 output_path: "./outputs"
 white_bg: False
-gaussian_path: "./gs_fill.ply"
-gaussian_orig: "./orange_raw.ply"
-lora_path: "./model/zxy"
+gaussian_path: "./screw_filled.ply"
+gaussian_orig: "./3dgs_screw.ply"
+lora_path: "./model/zxy_train2_5e5"
 
 lrs:
     means: 1.6e-4
@@ -14,13 +14,14 @@ lrs:
 sd_model_vertical: "sd2-community/stable-diffusion-2-depth"
 sd_model_horizontal: "sd2-community/stable-diffusion-2-depth"
 
-vertical_prompt: "a photo of the vertical cross section of an orange, detailed"
-vertical_negative_prompt: "low resolution, blurry, distorted, cross-section, cut, flesh, inside, table, leaves, shadow, environment, background elements, multiple oranges, stem"
+vertical_prompt: "a macro photo of the vertical cross section of a zxy screw"
+vertical_negative_prompt: "low resolution, blurry, distorted, background, environment, full whole object, uncut, organic, soft, shadow"
 
-horizontal_prompt: "a photo of the horizontal cross section of an orange, detailed"
-horizontal_negative_prompt: "low resolution, blurry, peel, rind, whole orange, distorted, fake, table, hands, shadow, leaves, perspective, 3d object"
+horizontal_prompt: "a macro photo of the horizontal cross section of a zxy screw"
+horizontal_negative_prompt: "low resolution, blurry, distorted, background, environment, full whole object, uncut, organic, soft, shadow"
 
 sds_per_epoch: 10
 sds_steps: 15
 guidance_scale: 15
-epochs: 100
+epochs: 400
+init_radius: 0.3
