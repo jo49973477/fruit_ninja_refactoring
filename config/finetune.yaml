@@ -1,10 +1,11 @@
-pretrained_model_name_or_path: "sd2-community/stable-diffusion-2-base"
-pretrained_txt2img_model_name_or_path: "sd2-community/stable-diffusion-2-base"
+pretrained_model_name_or_path: "sd2-community/stable-diffusion-2-depth"
+pretrained_txt2img_model_name_or_path: "sd2-community/stable-diffusion-2-depth"
 
 # 2. 데이터 세팅 (Data Settings)
-instance_data_dir: "./data/zxy_images"
+instance_data_dir: "/home/yeongyoo/03_Dataset/01_t-less_v2/sliced_images/zxy/"
 instance_prompt: "A zxy screw"
 class_data_dir: "./data/class_images"  # Prior Preservation 쓸 때만 필요!
+nickname: "zxy"
 class_prompt: "A screw"
 num_class_images: 100
 
@@ -18,7 +19,7 @@ seed: 42
 train_text_encoder: false  # VRAM 모자라면 끄는 게 국룰
 train_batch_size: 4
 sample_batch_size: 4
-num_train_epochs: 1
+num_train_epochs: 80
 max_train_steps: 1000
 checkpointing_steps: 500
 
@@ -29,7 +30,7 @@ mixed_precision: "fp16"  # "no", "fp16", "bf16"
 use_8bit_adam: false     # VRAM 극한으로 아낄 거면 true
 
 # 6. 학습률 및 옵티마이저 (Learning Rate & Optimizer)
-learning_rate: 5e-5
+learning_rate: 5e-6
 scale_lr: false
 lr_scheduler: "constant"
 lr_warmup_steps: 0
@@ -49,3 +50,7 @@ hub_token: null
 hub_model_id: null
 logging_dir: "logs"
 local_rank: -1
+
+resume_from_checkpoint: null
+revision: null
+tokenizer_name: null

@@ -176,6 +176,7 @@ class FinetuneConfig(BaseModel):
     instance_data_dir: str = "./data/zxy_images"
     instance_prompt: str = "A zxy screw"
     class_data_dir: Optional[str] = "./data/class_images"
+    nickname: str
     class_prompt: Optional[str] = "A screw"
     num_class_images: int = 100
 
