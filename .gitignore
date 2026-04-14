@@ -13,3 +13,4 @@ outputs/
 model/
 validation_logs*/
 wandb/
+dreambooth_test_results/

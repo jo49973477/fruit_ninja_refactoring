@@ -119,11 +119,11 @@ class DreamBoothDataset(Dataset):
         
         folder_name = image_path.parent.name
         if folder_name == "horizontal":
-            prompt = f"A horizontal cross-section of a {self.nickname} {self.class_prompt}"
+            prompt = f"A horizontal cross-section of a {self.nickname} {self.class_prompt}" if self.nickname is not None else f"A horizontal cross-section of a {self.class_prompt}"
         elif folder_name == "vertical":
-            prompt = f"A vertical cross-section of a {self.nickname} {self.class_prompt}"
+            prompt = f"A vertical cross-section of a {self.nickname} {self.class_prompt}" if self.nickname is not None else f"A vertical cross-section of a {self.class_prompt}"
         else:
-            prompt = f"A {self.nickname} {self.class_prompt}"
+            prompt = f"A {self.nickname} {self.class_prompt}" if self.nickname is not None else f"A {self.class_prompt}"
             
         example["instance_prompt_ids"] = self.tokenizer(
             prompt, truncation=True, padding="max_length", max_length=self.tokenizer.model_max_length, return_tensors="pt"
@@ -551,7 +551,7 @@ class DreamBoothTrainer:
                 val_image = Image.open(val_image_path).convert("RGB")
                 
                 # 테스트 프롬프트 (데이터셋에 설정된 nickname과 class 사용)
-                val_prompt = f"A {self.train_dataset.nickname} {self.train_dataset.class_prompt}"
+                val_prompt = f"A {self.train_dataset.nickname} {self.train_dataset.class_prompt}" if self.train_dataset.nickname is not None else f"A {self.train_dataset.class_prompt}"
 
                 # 4. 이미지 생성!
                 with torch.autocast(self.accelerator.device.type):
@@ -559,6 +559,7 @@ class DreamBoothTrainer:
                         prompt=val_prompt,
                         image=val_image,
                         num_inference_steps=30,
+                        strength = 0.8
                     ).images[0]
 
                 # 5. Accelerator를 통해 WandB에 이미지 업로드

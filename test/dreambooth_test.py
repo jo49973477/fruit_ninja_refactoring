@@ -9,10 +9,10 @@ def main():
     # 1. 캡틴의 환경 세팅
     # ==========================================
     # 🌟 캡틴이 학습시킨 결과물(Full Pipeline)이 저장된 폴더 경로! (LoRA가 아님!)
-    TRAINED_MODEL_PATH = "model/zxy_dreambooth_lora/checkpoint-1000" 
-    TEST_IMAGE_PATH = "/home/yeongyoo/03_Dataset/01_t-less_v2/train_kinect/01/rgb/0637.png" 
+    TRAINED_MODEL_PATH = "model/zxy_dreambooth_lora/checkpoint-1000/pipeline" 
+    TEST_IMAGE_PATH = "/home/yeongyoo/03_Dataset/03_fruitninja_finetune/orange/horizontal/orange1.png" 
     UNIQUE_TOKEN = "zxy"
-    CLASS_WORD = "screw"
+    CLASS_WORD = "orange"
     
     OUTPUT_DIR = "./dreambooth_test_results"
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -39,11 +39,8 @@ def main():
     # 4. 캡틴의 가혹한 프롬프트 테스트 셋
     # ==========================================
     prompts = [
-        f"A photo of {UNIQUE_TOKEN} {CLASS_WORD}", 
-        f"A {UNIQUE_TOKEN} {CLASS_WORD} under dramatic dark lighting", 
-        f"A {UNIQUE_TOKEN} {CLASS_WORD} completely made of pure gold", 
-        f"A vertical cross-section of {UNIQUE_TOKEN} {CLASS_WORD}",
-        f"A horizontal cross-section of {UNIQUE_TOKEN} {CLASS_WORD}",
+        f"A vertical cross-section of {CLASS_WORD}",
+        f"A horizontal cross-section of {CLASS_WORD}",
         f"A {CLASS_WORD}" # 대조군
     ]
     
