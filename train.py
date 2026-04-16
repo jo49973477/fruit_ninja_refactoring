@@ -163,6 +163,32 @@ class Trainer:
             grid[cell_key].append(idx)
 
         return grid
+    
+    
+    def _get_opaque_atom_loss(self, mask=None):
+        """
+        The regularizer which forces Gaussians into Opaque Atoms
+        """
+        cfg = self.trainer_cfg
+        
+        if not cfg.opaque_atom:
+            return 0.0
+        
+        opacities = torch.sigmoid(self.gaussians_save["opacities"]).squeeze(-1)
+        scales = torch.exp(self.gaussians_save["scales"])
+
+        if mask is not None:
+            opacities = opacities[mask]
+            scales = scales[mask]
+
+        loss_opaque = torch.mean(opacities * (1.0 - opacities))
+
+        loss_scale = torch.mean(scales)
+
+        scale_mean = scales.mean(dim=-1, keepdim=True)
+        loss_iso = torch.mean((scales - scale_mean) ** 2)
+
+        return cfg.lambda_opaque * loss_opaque + cfg.lambda_scale * loss_scale + cfg.lambda_iso * loss_iso
 
 
 
@@ -502,7 +528,7 @@ class Trainer:
                 ref_img = self._load_cached_reference(f"v{i}_ref.png")
             
             ground_truth = self.transform(ref_img).to(self.device)
-            loss = self.get_loss(render_image, ground_truth)
+            loss = self.get_loss(render_image, ground_truth) + self._get_opaque_atom_loss(mask)
             
             
             # 6. gsplat 비서 보고 및 역전파!
@@ -618,7 +644,7 @@ class Trainer:
                 ref_img = self._load_cached_reference(f"h{i}_ref.png")
             
             ground_truth = self.transform(ref_img).to(self.device)
-            loss = self.get_loss(render_image, ground_truth)
+            loss = self.get_loss(render_image, ground_truth) + self._get_opaque_atom_loss(mask_suf)
             
             # 5. gsplat 비서 보고 및 역전파!
             self.strategy.step_pre_backward(

@@ -147,6 +147,11 @@ class TrainerConfig(BaseModel):
     horizontal_prompt: str = "A high-quality, ultra-realistic macro photo of an orange cross-section, juicy orange flesh, distinct citrus segments, 8k resolution"
     horizontal_negative_prompt: str = "low resolution, blurry, peel only, whole orange, distorted, fake"
     
+    lambda_opaque: float = 0.1
+    lambda_scale: float = 0.01
+    lambda_iso: float = 0.1
+    opaque_atom: bool = False
+    
 
 
 class OldFinetuneConfig(BaseModel):

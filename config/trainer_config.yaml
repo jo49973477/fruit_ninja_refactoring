@@ -1,7 +1,7 @@
 output_path: "./outputs"
 white_bg: False
-gaussian_path: "./gs_fill.ply"
-gaussian_orig: "./orange_raw.ply"
+gaussian_path: "./ply_files/orange/gs_fill.ply"
+gaussian_orig: "./ply_files/orange/orange_raw.ply"
 center_pos: [0, 0.7, 0.6]
 
 lrs:
@@ -26,3 +26,4 @@ sds_steps: 15
 guidance_scale: 4.5
 epochs: 100
 init_radius: 2.5
+opaque_atom: true
