@@ -121,20 +121,22 @@ class TrainerConfig(BaseModel):
     gaussian_path: str
     gaussian_orig: str
     lora_path: Optional[str] = None
+    center_pos: List[float] = [0.0, 0.0, 0.0]
     
     epochs: int = 400
     init_radius: float = 2.5
     image_size: int = 512
     sds_per_epoch: int = 10
     sds_steps: int = 5
-    guidance_scale: int = 15
+    guidance_scale: float = 15
     
     lrs: Dict[str, float] = field(default_factory=lambda: {
         "means": 1.6e-4,    
         "scales": 1e-3,    
         "quats": 1e-3,      
         "opacities": 1e-2,  
-        "colors": 2.5e-3
+        "colors": 2.5e-3,
+        "sds": 1e-3
     })
     
     sd_model_vertical: str = "sd2-community/stable-diffusion-2-depth"
@@ -165,7 +167,7 @@ class FinetuneConfig(BaseModel):
     # ==========================================
     # 1. 모델 경로 세팅 (Model Settings)
     # ==========================================
-    pretrained_model_name_or_path: str = "sd2-community/stable-diffusion-2-base"
+    pretrained_model_name_or_path: str = "sd2-community/stable-diffusion-2-depth"
     pretrained_txt2img_model_name_or_path: str = "sd2-community/stable-diffusion-2-base"
     revision: Optional[str] = None
     tokenizer_name: Optional[str] = None
@@ -176,6 +178,7 @@ class FinetuneConfig(BaseModel):
     instance_data_dir: str = "./data/zxy_images"
     instance_prompt: str = "A zxy screw"
     class_data_dir: Optional[str] = "./data/class_images"
+    prompt_json_dir: Optional[str] = None
     nickname: Optional[str]
     class_prompt: Optional[str]
     num_class_images: int = 100

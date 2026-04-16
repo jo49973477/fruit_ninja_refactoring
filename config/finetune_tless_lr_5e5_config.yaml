@@ -1,9 +1,0 @@
-class_prompt: "screw"
-save_dir: "./model/zxy_train2_1e4"
-image_dir: "/home/yeongyoo/03_Dataset/01_t-less_v2/sliced_images/zxy/"
-output_image_save_dir: "validation_logs_1e4"
-nickname: "zxy"
-sd_model: "sd2-community/stable-diffusion-2-depth"
-prior_loss_weight: 1.0
-learning_rate: 1e-4
-train_batch_size: 2

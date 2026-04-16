@@ -2,24 +2,25 @@ pretrained_model_name_or_path: "sd2-community/stable-diffusion-2-depth"
 pretrained_txt2img_model_name_or_path: "sd2-community/stable-diffusion-2-base"
 
 # 2. 데이터 세팅 (Data Settings)
-instance_data_dir: "/home/yeongyoo/03_Dataset/03_fruitninja_finetune/orange/"
-instance_prompt: "A orange"
-class_data_dir: "./data/class_images"  # Prior Preservation 쓸 때만 필요!
-nickname: null
-class_prompt: "orange"
+instance_data_dir: "/home/yeongyoo/03_Dataset/01_t-less_v2/prompt_sliced_images/zxy/"
+instance_prompt: "A zxy screw"
+class_data_dir: "./data/screw_class_images"  # Prior Preservation 쓸 때만 필요!
+nickname: "zxy"
+class_prompt: "screw"
 num_class_images: 100
+prompt_json_dir: "/home/yeongyoo/03_Dataset/01_t-less_v2/prompt_sliced_images/zxy/metadata.json"
 
 # 3. 해상도 및 처리 (Image Processing)
 resolution: 512
 center_crop: false
 
 # 4. 학습 뼈대 세팅 (Training Basics)
-output_dir: "./model/orange_dreambooth_lora"
+output_dir: "./model/zxy_dreambooth_prompt"
 seed: 42
 train_text_encoder: true  # VRAM 모자라면 끄는 게 국룰
 train_batch_size: 1
 sample_batch_size: 1
-num_train_epochs: 500
+num_train_epochs: 100
 max_train_steps: 1000
 checkpointing_steps: 500
 

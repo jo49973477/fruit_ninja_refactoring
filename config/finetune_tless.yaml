@@ -1,10 +1,10 @@
 pretrained_model_name_or_path: "sd2-community/stable-diffusion-2-depth"
-pretrained_txt2img_model_name_or_path: "sd2-community/stable-diffusion-2-depth"
+pretrained_txt2img_model_name_or_path: "sd2-community/stable-diffusion-2-base"
 
 # 2. 데이터 세팅 (Data Settings)
-instance_data_dir: "/home/yeongyoo/03_Dataset/03_fruitninja_finetune/orange/"
+instance_data_dir: "/home/yeongyoo/03_Dataset/01_t-less_v2/sliced_images/zxy"
 instance_prompt: "A zxy screw"
-class_data_dir: "./data/class_images"  # Prior Preservation 쓸 때만 필요!
+class_data_dir: "./data/screw_class_images"  # Prior Preservation 쓸 때만 필요!
 nickname: "zxy"
 class_prompt: "A screw"
 num_class_images: 100
@@ -19,7 +19,7 @@ seed: 42
 train_text_encoder: true  # VRAM 모자라면 끄는 게 국룰
 train_batch_size: 1
 sample_batch_size: 1
-num_train_epochs: 80
+num_train_epochs: 100
 max_train_steps: 1000
 checkpointing_steps: 500
 
@@ -41,7 +41,7 @@ adam_epsilon: 1e-08
 max_grad_norm: 1.0
 
 # 7. 사전 지식 보존 (Prior Preservation)
-with_prior_preservation: false
+with_prior_preservation: true
 prior_loss_weight: 1.0
 
 # 8. 허깅페이스 허브 및 분산 학습 (System)

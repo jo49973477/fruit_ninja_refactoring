@@ -9,12 +9,13 @@ def main():
     # 1. 캡틴의 환경 세팅
     # ==========================================
     # 🌟 캡틴이 학습시킨 결과물(Full Pipeline)이 저장된 폴더 경로! (LoRA가 아님!)
-    TRAINED_MODEL_PATH = "model/zxy_dreambooth_lora/checkpoint-1000/pipeline" 
-    TEST_IMAGE_PATH = "/home/yeongyoo/03_Dataset/03_fruitninja_finetune/orange/horizontal/orange1.png" 
+    TRAINED_MODEL_PATH = "model/zxy_dreambooth_prompt/checkpoint-1000/pipeline" 
+    TEST_IMAGE_PATH = "/home/yeongyoo/03_Dataset/01_t-less_v2/prompt_sliced_images/zxy/vanilla_0028_depth.png" 
     UNIQUE_TOKEN = "zxy"
-    CLASS_WORD = "orange"
+    CLASS_WORD = "screw"
+    OUTPUT_DIR = "./dreambooth_test_results_zxy_prompt"
     
-    OUTPUT_DIR = "./dreambooth_test_results"
+    
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     # ==========================================
@@ -39,9 +40,12 @@ def main():
     # 4. 캡틴의 가혹한 프롬프트 테스트 셋
     # ==========================================
     prompts = [
-        f"A vertical cross-section of {CLASS_WORD}",
-        f"A horizontal cross-section of {CLASS_WORD}",
-        f"A {CLASS_WORD}" # 대조군
+        f"A vertical cross-section of {UNIQUE_TOKEN}",
+        f"A horizontal cross-section of {UNIQUE_TOKEN}",
+        f"A {UNIQUE_TOKEN}", # 대조군
+        f"A rear view of the vertical cross-section of {UNIQUE_TOKEN}",
+        f"A rear view of the horizontal cross-section of {UNIQUE_TOKEN}",
+        f"A rear view of the {UNIQUE_TOKEN}", # 대조군
     ]
     
     negative_prompt = "blurry, bad quality, deformed, background noise, floater, logo, text, font, letters"
@@ -59,8 +63,8 @@ def main():
             negative_prompt=negative_prompt,
             image=init_image, # 🌟 아까 주석 처리했던 거 해제!
             num_inference_steps=30,
-            guidance_scale=7.5,
-            strength=0.8 # 1.0에 가까울수록 원본 외곽선만 남고 안은 새로 칠함
+            guidance_scale=4.75,
+            strength=1.0, # 1.0에 가까울수록 원본 외곽선만 남고 안은 새로 칠함
         ).images[0]
         
         save_path = os.path.join(OUTPUT_DIR, f"test_{i}_prompt.png")

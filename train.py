@@ -54,14 +54,6 @@ class Trainer:
                 self.trainer_cfg.sd_model_vertical
             ).to(dev_vertical)
             
-            # loading saved lora path
-            if self.trainer_cfg.lora_path is not None:
-                self.pipe_vertical.load_lora_weights(self.trainer_cfg.lora_path)
-                active_adapters = self.pipe_vertical.get_active_adapters()
-                
-                if active_adapters:
-                    self.pipe_vertical.set_adapters(active_adapters, adapter_weights=[1.0])
-            
             # setting progress bar
             self.pipe_vertical.set_progress_bar_config(disable=True)
         except Exception as e:
@@ -76,13 +68,6 @@ class Trainer:
             self.pipe_horizontal = StableDiffusionDepth2ImgPipeline.from_pretrained(
                 self.trainer_cfg.sd_model_horizontal
             ).to(dev_horizontal)
-            
-            if self.trainer_cfg.lora_path is not None:
-                self.pipe_horizontal.load_lora_weights(self.trainer_cfg.lora_path)
-                active_adapters = self.pipe_horizontal.get_active_adapters()
-                
-                if active_adapters:
-                    self.pipe_horizontal.set_adapters(active_adapters, adapter_weights=[1.0])
             
             self.pipe_horizontal.set_progress_bar_config(disable=True)
             print("✨ Horizontal 모델 로드 성공!!")
@@ -103,6 +88,8 @@ class Trainer:
         self.optimizer = {k: optim.Adam([v], lr=self.trainer_cfg.lrs[k], eps=1e-15) for k, v in self.gaussians_save.items()}
         
         self.global_step = 0
+        
+        self.center_pos = torch.tensor(self.trainer_cfg.center_pos, device=self.device)
     
     
     
@@ -237,9 +224,9 @@ class Trainer:
         cam_pos = torch.tensor([cam_x, cam_y, cam_z], device=self.device)
         
         # getting forward vector
-        forward = -cam_pos / torch.norm(cam_pos)
-        up = torch.tensor([0.0, 1.0, 0.0], device=self.device)
+        forward = (self.center_pos - cam_pos) / torch.norm(cam_pos)
         
+        up = torch.tensor([0.0, 1.0, 0.0], device=self.device)
         if torch.abs(forward[1]) > 0.99: 
             up = torch.tensor([0.0, 0.0, -1.0], device=self.device)
         
@@ -289,68 +276,80 @@ class Trainer:
         pipe, prompt, negative_prompt = pipe_prompt_nega[mode]
         device = pipe.device
 
-        # 2. Extracting text embedding
-        text_inputs = pipe.tokenizer(
-            [prompt, negative_prompt], 
-            padding="max_length", 
-            max_length=pipe.tokenizer.model_max_length, 
-            truncation=True, 
-            return_tensors="pt"
-        ).to(device)
-        text_embeddings = pipe.text_encoder(text_inputs.input_ids)[0]
+        # 2. Extracting text embedding (🌟 원본 encode_prompt 활용하여 안전하게 순서 보장!)
+        prompt_embeds, negative_prompt_embeds = pipe.encode_prompt(
+            prompt,
+            device,
+            1,
+            True,
+            negative_prompt
+        )
+        # CFG를 위해 Negative(Uncond) -> Positive(Text) 순서로 결합
+        text_embeddings = torch.cat([negative_prompt_embeds, prompt_embeds])
+        
+        target_dtype = pipe.unet.dtype
         
         # 3. Normalising the image tensor appropriate for SD model
-        image_tensor = pipe.image_processor.preprocess(render_image.detach().permute(2, 0, 1).unsqueeze(0)).to(device)
+        image_tensor = render_image.detach().permute(2, 0, 1).unsqueeze(0)
+        image_tensor = (image_tensor * 2.0) - 1.0  # [0,1] -> [-1,1] 기적의 마법!
+        image_tensor = image_tensor.to(device=device, dtype=target_dtype)
+        
+        depth_map = depth_map.to(device=device, dtype=target_dtype)
         
         # getting initializing latent vector
         with torch.no_grad():
             init_latents = pipe.vae.encode(image_tensor).latent_dist.sample()
             init_latents = init_latents * pipe.vae.config.scaling_factor
 
-        
         # latent vector of rendered image
         init_latents = init_latents.detach().clone().requires_grad_(True)
-        optimizer = torch.optim.Adam([init_latents], lr=0.03) # 속살 생성을 위해 적절한 LR
+        optimizer = torch.optim.Adam([init_latents], lr=self.trainer_cfg.lrs["sds"]) 
         
         min_t = int(pipe.scheduler.config.num_train_timesteps * 0.02)
         max_t = int(pipe.scheduler.config.num_train_timesteps * 0.98)
         
         # starting SDS step
-        for _ in range(self.trainer_cfg.sds_steps): # 5번 정도만 깎아봅시다!
+        for _ in range(self.trainer_cfg.sds_steps):
             optimizer.zero_grad()
             
             # getting t value
-            t = torch.randint(min_t, max_t, (1,), device=device).long()
+            t = torch.randint(min_t, max_t + 1, (1,), device=device).long()
             
             # adding a noise into input latent vector
             noise = torch.randn_like(init_latents)
             latents_noisy = pipe.scheduler.add_noise(init_latents, noise, t)
             
-            # perparing depth map
+            # preparing depth map
             depth_mask = pipe.prepare_depth_map(
-                image=image_tensor,
-                depth_map=depth_map, 
-                batch_size=1,
-                do_classifier_free_guidance=True,
-                dtype=init_latents.dtype,
-                device=device,
+                image_tensor,
+                depth_map, 
+                1,
+                True, # do_classifier_free_guidance
+                init_latents.dtype,
+                device,
             )
             
-            # 4-channel noise + 1-channel depth mask
+            # 🌟 원본과 동일하게 모델 입력값 결합 및 스케일링 추가!
             latent_model_input = torch.cat([latents_noisy] * 2)
+            latent_model_input = pipe.scheduler.scale_model_input(latent_model_input, t)
             latent_model_input = torch.cat([latent_model_input, depth_mask], dim=1)
             
             # Predicting noise using UNet
             with torch.no_grad():
                 noise_pred_all = pipe.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
             
-            # noise with text, and noise without text
-            noise_pred_text, noise_pred_uncond = noise_pred_all.chunk(2)
+            # 🌟 Negative 먼저 분리!
+            noise_pred_uncond, noise_pred_text = noise_pred_all.chunk(2)
             
-            # GUIDANCE_SCALE = the influence of the text in the noise
-            # the predicted noise is the combination of noise with text and noise without text
+            # GUIDANCE_SCALE
             noise_pred = noise_pred_uncond + self.trainer_cfg.guidance_scale * (noise_pred_text - noise_pred_uncond)
-            grad = noise_pred - noise
+            
+            # 🌟 원본의 핵심: 가중치(w) 적용 및 NaN 방지!
+            alphas = pipe.scheduler.alphas_cumprod.to(device)
+            w = (1 - alphas[t]).view(1, 1, 1, 1)
+            grad = w * (noise_pred - noise)
+            grad = torch.nan_to_num(grad)
+            grad.clamp_(-1.0, 1.0)
             
             # Updating the latent
             target = (init_latents - grad).detach()
@@ -358,7 +357,7 @@ class Trainer:
             loss.backward()
             optimizer.step()
 
-        # 5. Getting final poutput
+        # 5. Getting final output
         with torch.no_grad():
             init_latents = init_latents / pipe.vae.config.scaling_factor
             output_image_tensor = pipe.vae.decode(init_latents).sample
@@ -375,16 +374,14 @@ class Trainer:
         
         c2w = torch.linalg.inv(viewmat)
         forward_dir = c2w[:3, 2].to(self.device)
-        center_pos = torch.tensor([0.0, 0.0, 0.0], device=self.device)
-        vec_to_pos = pos - center_pos
+        vec_to_pos = pos - self.center_pos
         depth_diff = torch.matmul(vec_to_pos, forward_dir)
         mask = depth_diff >= - slice_thickness
         
         return mask
     
     
-
-    def _get_horizontal_slice_mask(self, pos: torch.Tensor, viewmat: torch.Tensor, center_pos: torch.Tensor, slice_thickness: float):
+    def _get_horizontal_slice_mask(self, pos: torch.Tensor, viewmat: torch.Tensor, slice_thickness: float = 0.01, custom_center: torch.Tensor = None):
         """
         getting mask that masks only the horizontal slice of object, and the viewmat
         """
@@ -392,10 +389,21 @@ class Trainer:
         c2w = torch.linalg.inv(viewmat)
         forward_dir = c2w[:3, 2].to(self.device)
         
-        if isinstance(center_pos, torch.Tensor) and center_pos.dim() == 0:
-            center_pos_3d = torch.tensor([0.0, 0.0, center_pos.item()], device=self.device)
+        # 🌟 1. 캡틴이 이미 구해둔 '진짜 무게중심(self.center_pos)'을 기준으로 셋팅!
+        if custom_center is None:
+            center_pos_3d = self.center_pos.to(self.device)
         else:
-            center_pos_3d = torch.tensor(center_pos, device=self.device) if not isinstance(center_pos, torch.Tensor) else center_pos.to(self.device)
+            # 🌟 2. 캡틴이 "Z축(높이)만 이 위치로 잘라!" 하고 스칼라 값만 넘겼다면?
+            if isinstance(custom_center, torch.Tensor) and custom_center.dim() == 0:
+                # X, Y는 진짜 물체의 중심을 유지하고, Z만 캡틴이 넘겨준 값으로 갈아끼운다!
+                center_pos_3d = torch.tensor([
+                    self.center_pos[0], 
+                    self.center_pos[1], 
+                    custom_center.item()
+                ], device=self.device)
+            else:
+                # 캡틴이 [X, Y, Z] 좌표를 통째로 넘겼을 때는 그대로 쓴다!
+                center_pos_3d = custom_center
         
         vec_to_pos = pos - center_pos_3d
         depth_diff = torch.matmul(vec_to_pos, forward_dir)
@@ -477,9 +485,10 @@ class Trainer:
             depth_map = depth_map.unsqueeze(0).to(self.devices[-1])
             
             self._save_render_image(render_image, f"v{i}_render")
+            target_dtype = self.pipe_vertical.depth_estimator.dtype
             
             with torch.no_grad():
-                predicted_depth = self.pipe_vertical.depth_estimator(depth_map).predicted_depth
+                predicted_depth = self.pipe_vertical.depth_estimator(depth_map.to(dtype=target_dtype)).predicted_depth
                 depth_resized = F.interpolate(predicted_depth.unsqueeze(0), size=(512, 512), mode='bilinear').squeeze(0)
 
             # 5. 레퍼런스 이미지 생성 및 타겟 세팅
@@ -591,11 +600,12 @@ class Trainer:
             render_image = render_image.squeeze(0)
             depth_map = F.interpolate(render_image.permute(2, 0, 1).unsqueeze(0), size=(384, 384), mode='bilinear')[0]
             depth_map = depth_map.unsqueeze(0).to(self.devices[-2])
+            target_dtype = self.pipe_vertical.depth_estimator.dtype
             
             self._save_render_image(render_image, f"h{i}_render")
             
             with torch.no_grad():
-                predicted_depth = self.pipe_horizontal.depth_estimator(depth_map).predicted_depth
+                predicted_depth = self.pipe_horizontal.depth_estimator(depth_map.to(target_dtype)).predicted_depth
                 depth_resized = F.interpolate(predicted_depth.unsqueeze(0), size=(512, 512), mode='bilinear').squeeze(0)
 
             if epoch % self.trainer_cfg.sds_per_epoch == 0:

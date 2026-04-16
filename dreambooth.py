@@ -4,6 +4,7 @@ import os
 import gc # 가비지 컬렉터 추가
 from pathlib import Path
 import itertools
+import json
 
 import torch
 import torch.nn.functional as F
@@ -45,7 +46,7 @@ def collate_fn(examples, with_prior_preservation=False):
     if with_prior_preservation:
         input_ids += [example["class_prompt_ids"] for example in examples]
         pixel_values += [example["class_images"] for example in examples]
-        # Depth for class images (if applicable) would go here
+        depth_values += [example["class_depth_images"] for example in examples]
 
     pixel_values = torch.stack(pixel_values).to(memory_format=torch.contiguous_format).float()
     depth_values = torch.stack(depth_values).to(memory_format=torch.contiguous_format).float()
@@ -81,17 +82,46 @@ class PromptDataset(Dataset):
 # 📦 Dataset Classes
 # ==========================================================
 class DreamBoothDataset(Dataset):
-    def __init__(self, instance_data_root, tokenizer, vae_scale_factor=8, nickname="zxy", class_prompt="screw", size=512):
+    def __init__(self, instance_data_root, tokenizer, vae_scale_factor=8, nickname="zxy", class_prompt="screw", size=512, class_data_root=None, prompt_json_dir=None):
         self.size = size
         self.tokenizer = tokenizer
         self.vae_scale_factor = vae_scale_factor
         self.nickname = nickname
         self.class_prompt = class_prompt
+        
+        # --- 1. Instance Data Load ---
         self.instance_data_root = Path(instance_data_root)
+        all_instance_images = list(self.instance_data_root.rglob("*.jpg")) + list(self.instance_data_root.rglob("*.png"))
+        self.instance_images_path = [p for p in all_instance_images if "_depth." not in str(p)]
+        self.num_instance_images = len(self.instance_images_path)
+        
+        self.prompt_dict = {}
+        if prompt_json_dir is not None:
+            json_path = Path(prompt_json_dir)
+            # 만약 디렉토리 경로만 줬다면 metadata.json을 알아서 찾도록!
+            if json_path.is_dir():
+                json_path = json_path / "metadata.json"
+                
+            if json_path.exists():
+                with open(json_path, 'r', encoding='utf-8') as f:
+                    self.prompt_dict = json.load(f)
+                print(f"🤖 삐리빅! JSON 파일 로드 완료! 총 {len(self.prompt_dict)}개의 정밀 프롬프트를 장착했습니다! ({json_path})")
+            else:
+                print(f"⚠️ [경고] prompt_json_dir이 주어졌지만 {json_path}를 찾을 수 없습니다. 기본 폴더명 프롬프트로 대체합니다.")
 
-        all_images = list(self.instance_data_root.rglob("*.jpg")) + list(self.instance_data_root.rglob("*.png"))
-        self.instance_images_path = [p for p in all_images if "_depth." not in str(p)]
+        # --- 2. Class Data Load (Prior Preservation) ---
+        if class_data_root is not None:
+            self.class_data_root = Path(class_data_root)
+            self.class_data_root.mkdir(parents=True, exist_ok=True)
+            all_class_images = list(self.class_data_root.rglob("*.jpg")) + list(self.class_data_root.rglob("*.png"))
+            self.class_images_path = [p for p in all_class_images if "_depth." not in str(p)]
+            self.num_class_images = len(self.class_images_path)
+            self._length = max(self.num_class_images, self.num_instance_images)
+        else:
+            self.class_data_root = None
+            self._length = self.num_instance_images
 
+        # --- 3. Transforms ---
         self.image_transforms = transforms.Compose([
             transforms.Resize(size, interpolation=transforms.InterpolationMode.BILINEAR),
             transforms.RandomCrop(size),
@@ -104,30 +134,69 @@ class DreamBoothDataset(Dataset):
         ])
 
     def __len__(self):
-        return len(self.instance_images_path)
+        return self._length
 
     def __getitem__(self, index):
         example = {}
-        image_path = self.instance_images_path[index]
+        
+        # ==========================================
+        # [A] Instance Image 처리 (JSON vs 폴더명 프롬프트)
+        # ==========================================
+        instance_idx = index % self.num_instance_images
+        image_path = self.instance_images_path[instance_idx]
         depth_path = image_path.parent / f"{image_path.stem}_depth.png"
         
         instance_image = Image.open(image_path).convert("RGB")
-        instance_depth_image = Image.open(depth_path).convert("L") # 흑백으로 로드
+        instance_depth_image = Image.open(depth_path).convert("L")
             
         example["instance_images"] = self.image_transforms(instance_image)
         example["instance_depth_images"] = self.depth_image_transforms(instance_depth_image)
         
-        folder_name = image_path.parent.name
-        if folder_name == "horizontal":
-            prompt = f"A horizontal cross-section of a {self.nickname} {self.class_prompt}" if self.nickname is not None else f"A horizontal cross-section of a {self.class_prompt}"
-        elif folder_name == "vertical":
-            prompt = f"A vertical cross-section of a {self.nickname} {self.class_prompt}" if self.nickname is not None else f"A vertical cross-section of a {self.class_prompt}"
+        filename = image_path.name
+        
+        if self.prompt_dict and filename in self.prompt_dict:
+            prompt = self.prompt_dict[filename]
         else:
-            prompt = f"A {self.nickname} {self.class_prompt}" if self.nickname is not None else f"A {self.class_prompt}"
+            # 캡틴의 오리지널 폴더명 기반 동적 프롬프트 로직
+            folder_name = image_path.parent.name
+            if folder_name == "horizontal":
+                prompt = f"A horizontal cross-section of a {self.nickname} {self.class_prompt}" if self.nickname is not None else f"A horizontal cross-section of a {self.class_prompt}"
+            elif folder_name == "vertical":
+                prompt = f"A vertical cross-section of a {self.nickname} {self.class_prompt}" if self.nickname is not None else f"A vertical cross-section of a {self.class_prompt}"
+            else:
+                prompt = f"A {self.nickname} {self.class_prompt}" if self.nickname is not None else f"A {self.class_prompt}"
             
         example["instance_prompt_ids"] = self.tokenizer(
             prompt, truncation=True, padding="max_length", max_length=self.tokenizer.model_max_length, return_tensors="pt"
         ).input_ids
+
+        # ==========================================
+        # [B] Class Image 처리 (Prior Preservation)
+        # ==========================================
+        if self.class_data_root:
+            class_idx = index % self.num_class_images
+            class_image_path = self.class_images_path[class_idx]
+            
+            class_depth_path = class_image_path.parent / f"{class_image_path.stem}_depth.png"
+            class_image = Image.open(class_image_path).convert("RGB")
+            
+            if not class_depth_path.exists():
+                raise FileNotFoundError(
+                    f"🚨 [ERROR] 클래스 이미지의 Depth 맵이 없습니다: {class_depth_path}\n"
+                    "Depth2Img 모델을 훈련하려면 클래스 이미지(prior)도 반드시 뎁스 맵이 짝꿍으로 있어야 합니다!"
+                )
+                
+            class_depth_image = Image.open(class_depth_path).convert("L")
+                
+            example["class_images"] = self.image_transforms(class_image)
+            example["class_depth_images"] = self.depth_image_transforms(class_depth_image)
+            example["class_prompt_ids"] = self.tokenizer(
+                self.class_prompt,
+                truncation=True,
+                padding="max_length",
+                max_length=self.tokenizer.model_max_length,
+                return_tensors="pt",
+            ).input_ids
 
         return example
 
@@ -165,6 +234,12 @@ class DreamBoothTrainer:
         )
         
         self.accelerator.init_trackers("dreambooth-training")
+        
+        if self.args.train_text_encoder and self.args.gradient_accumulation_steps > 1 and self.accelerator.num_processes > 1:
+            raise ValueError(
+                "Gradient accumulation is not supported when training the text encoder in distributed training. "
+                "Please set gradient_accumulation_steps to 1. This feature will be supported in the future."
+            )
     
       
         
@@ -203,7 +278,7 @@ class DreamBoothTrainer:
 
         # 이미지 생성 루프
         for i in tqdm(range(num_new_images), desc="Generating class images"):
-            image = pipeline(self.args.class_prompt).images[0]
+            image = pipeline(f"A photo of {self.args.class_prompt}").images[0]
             hash_image = hashlib.sha1(image.tobytes()).hexdigest()
             image.save(class_images_dir / f"{cur_class_images + i}-{hash_image}.jpg")
 
@@ -218,6 +293,12 @@ class DreamBoothTrainer:
         
         instance_data_root = Path(self.args.instance_data_dir)
         all_images = list(instance_data_root.rglob("*.jpg")) + list(instance_data_root.rglob("*.png"))
+        original_images = [p for p in all_images if "_depth." not in str(p)]
+        
+        if self.args.with_prior_preservation and self.args.class_data_dir:
+            class_data_root = Path(self.args.class_data_dir)
+            all_images += list(class_data_root.rglob("*.jpg")) + list(class_data_root.rglob("*.png"))
+            
         original_images = [p for p in all_images if "_depth." not in str(p)]
         
         # 새로 생성해야 할 Depth 맵이 있는지 확인
@@ -363,7 +444,9 @@ class DreamBoothTrainer:
             vae_scale_factor=8, # 🌟 8로 고정
             size=self.args.resolution,
             nickname=self.args.nickname, 
-            class_prompt=self.args.class_prompt
+            class_prompt=self.args.class_prompt,
+            class_data_root= self.args.class_data_dir if self.args.with_prior_preservation else None,
+            prompt_json_dir = self.args.prompt_json_dir
         )
         self.train_dataloader = torch.utils.data.DataLoader(
             self.train_dataset, batch_size=self.args.train_batch_size, shuffle=True,
@@ -373,7 +456,7 @@ class DreamBoothTrainer:
 
         # 2. 🌟 잃어버린 스케줄러(lr_scheduler) 생성 로직 복구!
         self.lr_scheduler = get_scheduler(
-            "constant", # 또는 self.args.lr_scheduler
+            self.args.lr_scheduler,
             optimizer=self.optimizer,
             num_warmup_steps=0,
             num_training_steps=self.args.max_train_steps * self.args.gradient_accumulation_steps,
@@ -433,6 +516,7 @@ class DreamBoothTrainer:
                     # 2. Noice scheduling, inserting noise latent
                     noise = torch.randn_like(latents)
                     bsz = latents.shape[0]
+                    
                     timesteps = torch.randint(0, self.noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device)
                     timesteps = timesteps.long()
                     noisy_latents = self.noise_scheduler.add_noise(latents, noise, timesteps)

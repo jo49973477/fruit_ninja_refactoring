@@ -1,8 +1,8 @@
 output_path: "./outputs"
 white_bg: False
-gaussian_path: "./screw_filled.ply"
-gaussian_orig: "./3dgs_screw.ply"
-lora_path: "./model/zxy_train2_5e5"
+gaussian_path: "./gs_fill.ply"
+gaussian_orig: "./orange_raw.ply"
+center_pos: [0, 0.7, 0.6]
 
 lrs:
     means: 1.6e-4
@@ -10,18 +10,19 @@ lrs:
     quats: 1.0e-3
     opacities: 1.0e-2
     colors: 2.5e-3
+    sds: 0.1
 
-sd_model_vertical: "sd2-community/stable-diffusion-2-depth"
-sd_model_horizontal: "sd2-community/stable-diffusion-2-depth"
+sd_model_vertical: "/home/yeongyoo/01_Programming/01_fruit_ninja_refactoring/model/orange_dreambooth_lora/checkpoint-1000/pipeline"
+sd_model_horizontal: "/home/yeongyoo/01_Programming/01_fruit_ninja_refactoring/model/orange_dreambooth_lora/checkpoint-1000/pipeline"
 
-vertical_prompt: "a macro photo of the vertical cross section of a zxy screw"
+vertical_prompt: "the vertical cross-section of an orange"
 vertical_negative_prompt: "low resolution, blurry, distorted, background, environment, full whole object, uncut, organic, soft, shadow"
 
-horizontal_prompt: "a macro photo of the horizontal cross section of a zxy screw"
+horizontal_prompt: "the horizontal cross-section of an orange"
 horizontal_negative_prompt: "low resolution, blurry, distorted, background, environment, full whole object, uncut, organic, soft, shadow"
 
 sds_per_epoch: 10
 sds_steps: 15
-guidance_scale: 15
-epochs: 400
-init_radius: 0.3
+guidance_scale: 4.5
+epochs: 100
+init_radius: 2.5
