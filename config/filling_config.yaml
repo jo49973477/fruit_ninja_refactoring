@@ -1,2 +1,2 @@
-model_path: "3dgs_screw.ply"
-output_path: "screw_filled.ply"
+model_path: "ply_files/tless/3dgs_screw.ply"
+output_path: "ply_files/tless/screw_filled.ply"

@@ -90,6 +90,7 @@ def densify_grids(
                         density = ti.max(1, density)
                         ti.atomic_add(grid_density[i + dx, j + dy, k + dz], density)
 
+
 @ti.kernel
 def densify_grids_v2(
     init_particles: ti.template(),
@@ -108,6 +109,7 @@ def densify_grids_v2(
         j = ti.floor(y / grid_dx, dtype=int)
         k = ti.floor(z / grid_dx, dtype=int)
         ti.atomic_add(grid[i, j, k], 1)
+
 
 @ti.kernel
 def fill_dense_grids(
@@ -190,8 +192,8 @@ def collision_times(
             dir[2] = -1
 
         state = grid_density[index] > threshold
-        #print(grid_density[index])
-        #print(threshold)
+        # print(grid_density[index])
+        # print(threshold)
         index += dir
         i, j, k = index
         while ti.max(i, j, k) < size and ti.min(i, j, k) >= 0:
@@ -263,6 +265,7 @@ def internal_filling(
     print(count2)
     return new_start_idx
 
+
 @ti.kernel
 def internal_filling_v2(
     grid: ti.template(),
@@ -283,17 +286,17 @@ def internal_filling_v2(
             collision_hit = True
             count_dir = 0
             for dir_type in ti.static(range(6)):
-                    hit_test = collision_search(
-                        grid=grid,
-                        grid_density=grid_density,
-                        index=ti.Vector([i, j, k]),
-                        dir_type=dir_type,
-                        size=grid.shape[0],
-                        threshold=threshold,
-                    )
-                    if hit_test:
-                        count_dir += 1
-            
+                hit_test = collision_search(
+                    grid=grid,
+                    grid_density=grid_density,
+                    index=ti.Vector([i, j, k]),
+                    dir_type=dir_type,
+                    size=grid.shape[0],
+                    threshold=threshold,
+                )
+                if hit_test:
+                    count_dir += 1
+
             if count_dir >= 6:
                 diff = max_particles_per_cell - grid[i, j, k]
                 grid[i, j, k] = max_particles_per_cell
@@ -302,14 +305,13 @@ def internal_filling_v2(
                     di = ti.random()
                     dj = ti.random()
                     dk = ti.random()
-                    new_particles[index] = (
-                        ti.Vector([i + di, j + dj, k + dk]) * grid_dx
-                    )
+                    new_particles[index] = ti.Vector([i + di, j + dj, k + dk]) * grid_dx
                     count2 += 1
     print("count of internal filling particles")
     print(count1)
     print(count2)
     return new_start_idx
+
 
 @ti.kernel
 def internal_filling_2d(
@@ -427,10 +429,10 @@ def get_particle_volume(pos, grid_n: int, grid_dx: float, unifrom: bool = False)
 
 def particle_position_tensor_to_ply(position_tensor, filename):
     # position is (n,3)
-    
+
     if not os.path.exists("./log"):
         os.makedirs("./log", exist_ok=True)
-    
+
     if os.path.exists(filename):
         os.remove(filename)
     position = position_tensor.clone().detach().cpu().numpy()
@@ -448,6 +450,7 @@ end_header
         f.write(str.encode(header))
         f.write(position.tobytes())
         print("write", filename)
+
 
 def fill_particles(
     pos,
@@ -575,7 +578,7 @@ def fill_particles_2d(
     search_exclude_dir=5,
     ray_cast_dir=4,
     boundary: list = None,
-    smooth: bool = False
+    smooth: bool = False,
 ):
     pos_clone = pos.clone()
     if boundary is not None:
@@ -621,7 +624,7 @@ def fill_particles_2d(
         exclude_dir=search_exclude_dir,  # 0: x, 1: -x, 2: y, 3: -y, 4: z, 5: -z direction
         ray_cast_dir=ray_cast_dir,  # 0: x, 1: -x, 2: y, 3: -y, 4: z, 5: -z direction
         threshold=search_thres,
-        plane=plane
+        plane=plane,
     )
     print("after internal grids: ", fill_num)
 
@@ -662,6 +665,7 @@ def get_attr_from_closest(
         ti_new_opacity[pi] = ti_opacity[min_idx]
         ti_new_cov[pi] = ti_cov[min_idx]
 
+
 @ti.kernel
 def get_attr_from_closest2(
     ti_pos: ti.template(),
@@ -673,7 +677,7 @@ def get_attr_from_closest2(
     ti_new_shs: ti.template(),
     ti_new_opacity: ti.template(),
     ti_new_scale: ti.template(),
-    ti_new_rot: ti.template()
+    ti_new_rot: ti.template(),
 ):
     for pi in range(ti_new_pos.shape[0]):
         p = ti_new_pos[pi]
@@ -688,6 +692,7 @@ def get_attr_from_closest2(
         ti_new_opacity[pi] = ti_opacity[min_idx]
         ti_new_scale[pi] = ti_scale[min_idx]
         ti_new_rot[pi] = ti_rot[min_idx]
+
 
 def init_filled_particles(pos, shs, cov, opacity, new_pos):
     shs = shs.reshape(pos.shape[0], -1)
@@ -729,6 +734,7 @@ def init_filled_particles(pos, shs, cov, opacity, new_pos):
     cov_tensor = torch.cat([cov, cov_tensor], dim=0)
     return shs_tensor, opacity_tensor, cov_tensor
 
+
 def init_filled_particles2(pos, shs, rot, scale, opacity, new_pos):
     shs = shs.reshape(pos.shape[0], -1)
     ti_pos = ti.Vector.field(n=3, dtype=float, shape=pos.shape[0])
@@ -761,7 +767,7 @@ def init_filled_particles2(pos, shs, rot, scale, opacity, new_pos):
         ti_new_shs,
         ti_new_opacity,
         ti_new_scale,
-        ti_new_rot
+        ti_new_rot,
     )
 
     shs_tensor = ti_new_shs.to_torch().cuda()
