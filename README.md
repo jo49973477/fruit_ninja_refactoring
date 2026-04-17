@@ -15,7 +15,7 @@ If you want to use ```pip```, no worries! It is way simple, too!
 pip install .
 ```
 
-## 2. Heil Hydra!
+## 2. Leveraging Hydra
 
 This script leverages ```hydra``` to manage configurations efficiently. You don't need to pass dozens of arguments through the command line; simply configure your ```.yaml``` file or override specific parameters on the fly.
 
